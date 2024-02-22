@@ -12,9 +12,9 @@ on:
         required: false
         default: '*'
       GoLive:
-        description: Promote AppSource App to go live if it passes technical validation? (Y/N)
-        required: false
-        default: 'N'
+        description: Promote AppSource App to go live if it passes technical validation?
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,16 +30,22 @@ env:
 
 jobs:
   Initialization:
+    needs: [ ]
     runs-on: [ windows-latest ]
     outputs:
       telemetryScopeJson: ${{ steps.init.outputs.telemetryScopeJson }}
     steps:
+      - name: Dump Workflow Information
+        uses: andersgMSFT/AL-Go-Actions/DumpWorkflowInfo@PPP
+        with:
+          shell: powershell
+
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Initialize the workflow
         id: init
-        uses: andersgMSFT/AL-Go-Actions/WorkflowInitialize@PPPreview
+        uses: andersgMSFT/AL-Go-Actions/WorkflowInitialize@PPP
         with:
           shell: powershell
           eventId: "DO0103"
@@ -50,37 +56,25 @@ jobs:
     name: Deliver to AppSource
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read settings
-        uses: andersgMSFT/AL-Go-Actions/ReadSettings@PPPreview
+        uses: andersgMSFT/AL-Go-Actions/ReadSettings@PPP
         with:
           shell: powershell
-          parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
 
       - name: Read secrets
-        uses: andersgMSFT/AL-Go-Actions/ReadSecrets@PPPreview
-        env:
-          secrets: ${{ toJson(secrets) }}
+        id: ReadSecrets
+        uses: andersgMSFT/AL-Go-Actions/ReadSecrets@PPP
         with:
           shell: powershell
-          settingsJson: ${{ env.Settings }}
-          secrets: 'appSourceContext'
-
-      - name: DeliveryContext
-        id: deliveryContext
-        run: |
-          $ErrorActionPreference = "STOP"
-          Set-StrictMode -version 2.0
-          $contextName = 'appSourceContext'
-          $deliveryContext = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String([System.Environment]::GetEnvironmentVariable($contextName)))
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "deliveryContext=$deliveryContext"
-          Write-Host "deliveryContext=$deliveryContext"
+          gitHubSecrets: ${{ toJson(secrets) }}
+          getSecrets: 'appSourceContext'
 
       - name: Deliver
-        uses: andersgMSFT/AL-Go-Actions/Deliver@PPPreview
+        uses: andersgMSFT/AL-Go-Actions/Deliver@PPP
         env:
-          deliveryContext: '${{ steps.deliveryContext.outputs.deliveryContext }}'
+          Secrets: '${{ steps.ReadSecrets.outputs.Secrets }}'
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
@@ -91,16 +85,16 @@ jobs:
           goLive: ${{ github.event.inputs.goLive }}
 
   PostProcess:
+    needs: [ Initialization, Deliver ]
     if: always()
     runs-on: [ windows-latest ]
-    needs: [ Initialization, Deliver ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Finalize the workflow
         id: PostProcess
-        uses: andersgMSFT/AL-Go-Actions/WorkflowPostProcess@PPPreview
+        uses: andersgMSFT/AL-Go-Actions/WorkflowPostProcess@PPP
         with:
           shell: powershell
           eventId: "DO0103"
